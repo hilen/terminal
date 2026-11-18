@@ -1,4 +1,4 @@
-//! A shell on this machine in a pty of its own.
+//! A shell or another program on this machine in a pty of its own.
 
 use std::{
     env,
@@ -13,9 +13,13 @@ use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::TerminalSize;
 
-/// The login shell of the user, started in a pty. Dropping it closes the
-/// pty, which hangs the shell up, the signal of a closed terminal window,
-/// and the shell passes it on to what runs in it.
+/// The byte the Ctrl C key sends. The pty turns it into the interrupt
+/// signal for what runs in front.
+pub(crate) const CTRL_C: u8 = 3;
+
+/// The login shell of the user or another program, started in a pty.
+/// Dropping it closes the pty, which hangs the program up, the signal of a
+/// closed terminal window, and a shell passes it on to what runs in it.
 pub struct LocalShell {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -24,19 +28,45 @@ pub struct LocalShell {
 impl LocalShell {
     /// Starts the login shell of the user in `folder`. `printed` gets every
     /// piece it prints, on a thread of its own, and `ended` runs once after
-    /// the shell is gone.
+    /// the shell is gone, with its exit code. A shell that a signal ended
+    /// has none.
     pub fn start(
         folder: &Path,
         size: TerminalSize,
+        printed: impl FnMut(Vec<u8>) + Send + 'static,
+        ended: impl FnOnce(Option<u32>) + Send + 'static,
+    ) -> Result<Self> {
+        let (program, args) = login_shell();
+        Self::spawn(&program, &args, folder, size, printed, ended)
+    }
+
+    /// Runs `command`, a program and its arguments, in `folder`, with the
+    /// pty as its terminal. The program is found on the `PATH` of this
+    /// process. `printed` and `ended` are those of `start`.
+    pub fn run(
+        command: &[String],
+        folder: &Path,
+        size: TerminalSize,
+        printed: impl FnMut(Vec<u8>) + Send + 'static,
+        ended: impl FnOnce(Option<u32>) + Send + 'static,
+    ) -> Result<Self> {
+        let (program, args) = command.split_first().context("no program to run")?;
+        Self::spawn(program, args, folder, size, printed, ended)
+    }
+
+    fn spawn(
+        program: &str,
+        args: &[String],
+        folder: &Path,
+        size: TerminalSize,
         mut printed: impl FnMut(Vec<u8>) + Send + 'static,
-        ended: impl FnOnce() + Send + 'static,
+        ended: impl FnOnce(Option<u32>) + Send + 'static,
     ) -> Result<Self> {
         let pair = native_pty_system()
             .openpty(pty_size(size))
             .map_err(|err| anyhow!("cannot open a terminal: {err}"))?;
-        let (program, args) = login_shell();
-        let mut builder = CommandBuilder::new(&program);
-        builder.args(&args);
+        let mut builder = CommandBuilder::new(program);
+        builder.args(args);
         builder.cwd(folder);
         if env::var_os("TERM").is_none() {
             builder.env("TERM", "xterm-256color");
@@ -56,6 +86,7 @@ impl LocalShell {
             .map_err(|err| anyhow!("cannot write to the terminal: {err}"))?;
         info!("started {program} in {}", folder.display());
 
+        let name = program.to_string();
         thread::Builder::new()
             .name("terminal shell".into())
             .spawn(move || {
@@ -66,17 +97,23 @@ impl LocalShell {
                         Ok(read) => printed(buffer[..read].to_vec()),
                         Err(err) if err.kind() == ErrorKind::Interrupted => {}
                         Err(err) => {
-                            debug!("the stream of the shell ended: {err}");
+                            debug!("the stream of {name} ended: {err}");
                             break;
                         }
                     }
                 }
-                // The wait takes the ended shell out of the process table.
-                match child.wait() {
-                    Ok(status) => info!("the shell ended, {status:?}"),
-                    Err(err) => warn!("the end of the shell gave no status: {err}"),
-                }
-                ended();
+                // The wait takes the ended program out of the process table.
+                let code = match child.wait() {
+                    Ok(status) => {
+                        info!("{name} ended, {status:?}");
+                        status.signal().is_none().then(|| status.exit_code())
+                    }
+                    Err(err) => {
+                        warn!("the end of {name} gave no status: {err}");
+                        None
+                    }
+                };
+                ended(code);
             })
             .context("start the reader of the shell")?;
 
@@ -129,17 +166,11 @@ mod tests {
     fn a_shell_runs_a_command_and_ends_on_exit() -> Result<()> {
         let (printed, output) = mpsc::channel::<Vec<u8>>();
         let (ended, end) = mpsc::channel::<()>();
-        let size = TerminalSize {
-            columns:     80,
-            lines:       24,
-            cell_width:  8,
-            cell_height: 16,
-        };
         let mut shell = LocalShell::start(
             &env::temp_dir(),
-            size,
+            size(),
             move |bytes| printed.send(bytes).expect("the test reads the output"),
-            move || ended.send(()).expect("the test waits for the end"),
+            move |_| ended.send(()).expect("the test waits for the end"),
         )?;
         // The sum shows the shell ran the line, an echo of the typed keys
         // holds no 42.
@@ -152,5 +183,87 @@ mod tests {
         shell.write(b"exit\n")?;
         end.recv_timeout(Duration::from_secs(10)).context("the shell did not end")?;
         Ok(())
+    }
+
+    fn size() -> TerminalSize {
+        TerminalSize {
+            columns:     80,
+            lines:       24,
+            cell_width:  8,
+            cell_height: 16,
+        }
+    }
+
+    /// Runs `script` with `sh` and gives what it printed and its exit code.
+    fn run_sh(script: &str) -> Result<(String, Option<u32>)> {
+        let (printed, output) = mpsc::channel::<Vec<u8>>();
+        let (ended, end) = mpsc::channel::<Option<u32>>();
+        let command = ["sh", "-c", script].map(str::to_string);
+        // Held until the end, a dropped shell hangs the program up.
+        let shell = LocalShell::run(
+            &command,
+            &env::temp_dir(),
+            size(),
+            move |bytes| printed.send(bytes).expect("the test reads the output"),
+            move |code| ended.send(code).expect("the test waits for the end"),
+        )?;
+        let code = end.recv_timeout(Duration::from_secs(10)).context("the program did not end")?;
+        drop(shell);
+        let seen: Vec<u8> = output.try_iter().flatten().collect();
+        Ok((String::from_utf8_lossy(&seen).into_owned(), code))
+    }
+
+    #[test]
+    fn a_program_runs_and_gives_its_exit_code() -> Result<()> {
+        let (seen, code) = run_sh("echo ran-$((40+2)); exit 7")?;
+        assert!(seen.contains("ran-42"), "printed {seen:?}");
+        assert_eq!(code, Some(7));
+        Ok(())
+    }
+
+    #[test]
+    fn a_program_sees_a_terminal() -> Result<()> {
+        let (seen, code) = run_sh("test -t 0 && test -t 1 && echo a-terminal")?;
+        assert!(seen.contains("a-terminal"), "printed {seen:?}");
+        assert_eq!(code, Some(0));
+        Ok(())
+    }
+
+    #[test]
+    fn a_program_ended_by_a_signal_has_no_exit_code() -> Result<()> {
+        let (_, code) = run_sh("kill -KILL $$")?;
+        assert_eq!(code, None);
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_c_ends_a_program() -> Result<()> {
+        let (printed, output) = mpsc::channel::<Vec<u8>>();
+        let (ended, end) = mpsc::channel::<Option<u32>>();
+        let command = ["sh", "-c", "echo waits; sleep 60"].map(str::to_string);
+        let mut shell = LocalShell::run(
+            &command,
+            &env::temp_dir(),
+            size(),
+            move |bytes| printed.send(bytes).expect("the test reads the output"),
+            move |code| ended.send(code).expect("the test waits for the end"),
+        )?;
+        // The program runs once it printed, a Ctrl C before that finds no
+        // program to end.
+        let mut seen = String::new();
+        while !seen.contains("waits") {
+            let bytes = output.recv_timeout(Duration::from_secs(10)).context("no output")?;
+            seen.push_str(&String::from_utf8_lossy(&bytes));
+        }
+        shell.write(&[CTRL_C])?;
+        end.recv_timeout(Duration::from_secs(10))
+            .context("Ctrl C did not end the program")?;
+        Ok(())
+    }
+
+    #[test]
+    fn no_program_is_an_error() {
+        let result = LocalShell::run(&[], &env::temp_dir(), size(), |_| {}, |_| {});
+        assert!(result.is_err());
     }
 }

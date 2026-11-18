@@ -3,7 +3,7 @@
 A terminal for apps on [hilen](https://github.com/hilen/hilen): the screen of a shell
 with its colors and its cursor, the keys, a selection with the mouse, copy and paste,
 and the wheel over what scrolled away. On a desktop it also starts the login shell of
-the user in a pty. `vim`, `htop` and `ssh` work in it.
+the user in a pty, or runs another program there. `vim`, `htop` and `ssh` work in it.
 
 The emulator is the [alacritty_terminal](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
 crate. Each row of the screen is 1 hilen label on a cell grid, with a color behind its
@@ -25,6 +25,14 @@ terminal = { git = "https://github.com/hilen/terminal", rev = "<full sha>" }
   size. Dropping it closes the pty, which hangs the shell up, like a closed terminal
   window. codeloom shows its terminal panel this way. A phone and a browser build have
   no `LocalTerminal` and no `LocalShell`.
+- `LocalTerminal` also runs a program in place of the shell: `run(folder, command)`
+  takes the program and its arguments and finds it on the `PATH` of the app. The pty is
+  its terminal, so it prints its colors and reads the keys. `ended` fires with the exit
+  code of the shell or the program, with none when a signal ended it. `interrupt()`
+  sends Ctrl C to what runs, the way the key does. `print(text)` puts a text of the app
+  on the screen, like a note on how the program ended. It takes the escape codes a
+  program prints, and a new line is `\r\n`. codeloom runs the program of the open file
+  this way.
 - `TerminalStyle` holds a mono font, the bold font, the text size, the gap to the edge
   and a `TerminalPalette`. The default palette is Atelier Dune Light in the light theme
   and Bamboo in the dark one.

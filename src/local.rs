@@ -1,4 +1,4 @@
-//! A terminal with a shell on this machine.
+//! A terminal with a shell or another program of this machine.
 
 use std::path::{Path, PathBuf};
 
@@ -10,17 +10,26 @@ use hilen::{
 };
 use log::warn;
 
-use crate::{LocalShell, TerminalSize, TerminalStyle, TerminalView};
+use crate::{LocalShell, TerminalSize, TerminalStyle, TerminalView, shell::CTRL_C};
 
-/// A `TerminalView` with the login shell of the user in it. The shell
-/// starts in its folder once the view has a size, and ends with the view.
+/// What starts once the view has a size.
+struct Start {
+    folder:  PathBuf,
+    /// A program and its arguments, None is the login shell.
+    command: Option<Vec<String>>,
+}
+
+/// A `TerminalView` with the login shell of the user or another program in
+/// it. It starts in its folder once the view has a size, and ends with the
+/// view.
 #[view]
 pub struct LocalTerminal {
-    /// The shell ended, by `exit` or by itself.
-    pub ended: Event,
+    /// The shell or the program ended, by `exit` or by itself, with its
+    /// exit code. One that a signal ended has none.
+    pub ended: Event<Option<u32>>,
 
-    folder: Option<PathBuf>,
-    shell:  Option<LocalShell>,
+    waiting: Option<Start>,
+    shell:   Option<LocalShell>,
 
     #[init]
     view: TerminalView,
@@ -40,16 +49,38 @@ impl LocalTerminal {
     }
 
     /// Starts the shell in `folder`, now or when the view gets its size.
-    pub fn start(mut self: Weak<Self>, folder: &Path) {
-        self.folder = Some(folder.to_path_buf());
-        if let Some(size) = self.view.size() {
-            self.start_shell(size);
-        }
+    pub fn start(self: Weak<Self>, folder: &Path) {
+        self.start_when_sized(Start {
+            folder:  folder.to_path_buf(),
+            command: None,
+        });
     }
 
-    /// The shell runs and has not ended.
+    /// Runs `command`, a program and its arguments, in `folder` in place
+    /// of the shell, now or when the view gets its size. The keys go to the
+    /// program. The terminal is over when the program ends.
+    pub fn run(self: Weak<Self>, folder: &Path, command: &[String]) {
+        self.start_when_sized(Start {
+            folder:  folder.to_path_buf(),
+            command: Some(command.to_vec()),
+        });
+    }
+
+    /// The shell or the program runs and has not ended.
     pub fn is_running(&self) -> bool {
         self.shell.is_some()
+    }
+
+    /// Ctrl C for what runs in the terminal, as the key sends it.
+    pub fn interrupt(self: Weak<Self>) {
+        self.write(&[CTRL_C]);
+    }
+
+    /// A text of the owner on the screen, like a note on how a program
+    /// ended. It takes the escape codes a program prints, and a new line is
+    /// `\r\n`.
+    pub fn print(self: Weak<Self>, text: &str) {
+        self.view.feed(text.as_bytes());
     }
 
     /// Gives the keys to the terminal, as a click on it does.
@@ -72,8 +103,15 @@ impl LocalTerminal {
         }
     }
 
+    fn start_when_sized(mut self: Weak<Self>, start: Start) {
+        self.waiting = Some(start);
+        if let Some(size) = self.view.size() {
+            self.start_shell(size);
+        }
+    }
+
     fn start_shell(mut self: Weak<Self>, size: TerminalSize) {
-        let Some(folder) = self.folder.take() else {
+        let Some(start) = self.waiting.take() else {
             return;
         };
         let printed = move |bytes: Vec<u8>| {
@@ -83,24 +121,31 @@ impl LocalTerminal {
                 }
             });
         };
-        let ended = move || {
+        let ended = move |code: Option<u32>| {
             on_main(move || {
                 if self.is_ok() {
                     let mut this = self;
                     this.shell = None;
                     this.view.set_ended(true);
-                    this.ended.trigger(());
+                    this.ended.trigger(code);
                 }
             });
         };
-        match LocalShell::start(&folder, size, printed, ended) {
+        let started = match &start.command {
+            Some(command) => LocalShell::run(command, &start.folder, size, printed, ended),
+            None => LocalShell::start(&start.folder, size, printed, ended),
+        };
+        match started {
             Ok(shell) => {
                 self.view.set_ended(false);
                 self.shell = Some(shell);
             }
             Err(err) => {
                 warn!("{err:#}");
-                self.view.feed(format!("{err:#}\r\n").as_bytes());
+                // The reason can have several lines, and a terminal goes back
+                // to the start of a line only on `\r`.
+                let reason = format!("{err:#}").replace('\n', "\r\n");
+                self.view.feed(format!("{reason}\r\n").as_bytes());
                 self.view.set_ended(true);
             }
         }

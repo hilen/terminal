@@ -1,0 +1,57 @@
+[workspace]
+resolver = "3"
+
+[workspace.dependencies]
+alacritty_terminal = { version = "0.26", default-features = false }
+anyhow             = "1.0"
+# Every app that uses this crate pins the same hilen commit, or Cargo builds
+# 2 copies of hilen and the views of this crate fit in none of its windows.
+hilen              = { git = "https://github.com/hilen/hilen", rev = "52ffb1bab2e6be460b54cb65ee9a4a793459d62c" }
+log                = "0.4"
+portable-pty       = "0.9"
+
+[workspace.lints.clippy]
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+needless_pass_by_value  = "allow"
+
+[package]
+authors     = ["Vladas Zakrevskis <146100@gmail.com>"]
+description = "A terminal for hilen apps: the screen of a shell, its keys and colors, and a shell on this machine"
+edition     = "2024"
+license     = "MIT"
+name        = "terminal"
+repository  = "https://github.com/hilen/terminal"
+version     = "0.1.0"
+
+[lints]
+workspace = true
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+anyhow             = { workspace = true }
+hilen              = { workspace = true }
+log                = { workspace = true }
+
+# A shell on this machine needs a pty, a phone and a browser have none.
+[target.'cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))'.dependencies]
+portable-pty = { workspace = true }
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.deploy]
+codegen-units = 1
+inherits      = "release"
+lto           = "fat"
+opt-level     = 3
+strip         = true
+
+[profile.deploy-wasm]
+inherits = "deploy"
+strip    = false

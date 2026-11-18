@@ -6,7 +6,7 @@ alacritty_terminal = { version = "0.26", default-features = false }
 anyhow             = "1.0"
 # Every app that uses this crate pins the same hilen commit, or Cargo builds
 # 2 copies of hilen and the views of this crate fit in none of its windows.
-hilen              = { git = "https://github.com/hilen/hilen", rev = "52ffb1bab2e6be460b54cb65ee9a4a793459d62c" }
+hilen              = { git = "https://github.com/hilen/hilen", rev = "1afaa9ca621f405f8ca92ea78944571fbf6504f6" }
 log                = "0.4"
 portable-pty       = "0.9"
 

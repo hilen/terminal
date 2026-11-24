@@ -8,7 +8,10 @@ anyhow             = "1.0"
 # 2 copies of hilen and the views of this crate fit in none of its windows.
 hilen              = { git = "https://github.com/hilen/hilen", rev = "1afaa9ca621f405f8ca92ea78944571fbf6504f6" }
 log                = "0.4"
-portable-pty       = "0.9"
+# 0.9.0 of crates.io pulls nix 0.28, whose build script Rust will refuse in a
+# future release. wezterm main has nix 0.29 and no release since 2025-02-12.
+# Every app that uses this crate takes portable-pty from the same commit.
+portable-pty       = { git = "https://github.com/wezterm/wezterm", rev = "89e01990a5ad0b30e67d84d68b2fc4ad4eb71276" }
 
 [workspace.lints.clippy]
 all      = { level = "warn", priority = -1 }

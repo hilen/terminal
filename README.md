@@ -2,7 +2,7 @@
 
 A terminal for apps on [hilen](https://github.com/hilen/hilen): the screen of a shell
 with its colors and its cursor, the keys, a selection with the mouse, copy and paste,
-and the wheel over what scrolled away. On a desktop it also starts the login shell of
+the wheel over what scrolled away, and links that open in the browser. On a desktop it also starts the login shell of
 the user in a pty, or runs another program there. `vim`, `htop` and `ssh` work in it.
 
 The emulator is the [alacritty_terminal](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
@@ -36,6 +36,14 @@ terminal = { git = "https://github.com/hilen/terminal", rev = "<full sha>" }
 - `TerminalStyle` holds a mono font, the bold font, the text size, the gap to the edge
   and a `TerminalPalette`. The default palette is Atelier Dune Light in the light theme
   and Bamboo in the dark one.
+- A click on a link opens it in the browser, with `open_url` of hilen, which works on
+  every platform. A link is an `http` or `https` address a program printed, found by
+  [linkify](https://github.com/robinst/linkify) in the whole line, so an address the
+  terminal wrapped onto more rows opens whole. A link a program marked with OSC 8, the
+  escape code of a link in a terminal, opens its own address. Any other kind, like
+  `javascript:` or `file:`, does not open. The link opens only when no second click
+  follows, about 250 ms later, so a double click still selects a word, and a drag still
+  selects text. The link under the pointer gets a line under it and a hand cursor.
 - Copy is Cmd C and paste Cmd V. The engine also takes Ctrl for Cmd, and a shell needs
   Ctrl with a letter, so an app that binds Cmd keys checks `Keys::modifiers().meta()`
   while the terminal has the keys, `has_keys`.

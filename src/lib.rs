@@ -7,6 +7,7 @@
 #![feature(arbitrary_self_types)]
 
 mod keys;
+mod link;
 mod palette;
 mod screen;
 mod view;

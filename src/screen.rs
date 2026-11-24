@@ -14,6 +14,8 @@ use alacritty_terminal::{
     vte::ansi::{Color, CursorShape, NamedColor, Processor, Rgb},
 };
 
+use crate::link::{self, Link};
+
 /// The color of a cell before the theme gives it its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Paint {
@@ -125,6 +127,8 @@ pub struct Screen {
     size:        Cells,
     /// The size of 1 cell in pixels, a program may ask for it.
     cell_pixels: (u16, u16),
+    /// The cell of the view the pointer is over, None off the cells.
+    hover:       Option<(usize, usize)>,
 }
 
 /// The lines kept above the screen, to scroll back to.
@@ -143,6 +147,7 @@ impl Screen {
             heard,
             size,
             cell_pixels,
+            hover: None,
         }
     }
 
@@ -279,8 +284,43 @@ impl Screen {
         self.term.selection_to_string().filter(|text| !text.is_empty())
     }
 
+    /// The address of the link at a cell of the view.
+    pub fn link_at(&self, column: usize, row: usize) -> Option<String> {
+        self.link_in_view(column, row).map(|link| link.url)
+    }
+
+    fn link_in_view(&self, column: usize, row: usize) -> Option<Link> {
+        if column >= self.size.columns || row >= self.size.lines {
+            return None;
+        }
+        link::link_at(&self.term, self.point(column, row))
+    }
+
+    /// The pointer moved to a cell of the view, or off the cells with
+    /// None. The link under it gets a line under it. True when the rows
+    /// have to be drawn again, another link is under the pointer now.
+    pub fn hover(&mut self, cell: Option<(usize, usize)>) -> bool {
+        if cell == self.hover {
+            return false;
+        }
+        let before = self.hovered_link();
+        self.hover = cell;
+        self.hovered_link() != before
+    }
+
+    /// A link is under the pointer.
+    pub fn link_hovered(&self) -> bool {
+        self.hovered_link().is_some()
+    }
+
+    fn hovered_link(&self) -> Option<Link> {
+        let (column, row) = self.hover?;
+        self.link_in_view(column, row)
+    }
+
     /// Every row of the view, the top one first.
     pub fn rows(&self) -> Vec<Row> {
+        let hovered = self.hovered_link();
         let content = self.term.renderable_content();
         let offset = i32::try_from(content.display_offset).unwrap_or(i32::MAX);
         let cursor = (content.cursor.shape != CursorShape::Hidden).then_some(content.cursor.point);
@@ -321,7 +361,8 @@ impl Screen {
                 bold: cell.flags.contains(Flags::BOLD),
                 dim: cell.flags.contains(Flags::DIM) || dim_named,
                 lines: Lines {
-                    under:   cell.flags.intersects(Flags::ALL_UNDERLINES),
+                    under:   cell.flags.intersects(Flags::ALL_UNDERLINES)
+                        || hovered.as_ref().is_some_and(|link| link.contains(cell.point)),
                     through: cell.flags.contains(Flags::STRIKEOUT),
                 },
             };

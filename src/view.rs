@@ -8,14 +8,14 @@ use hilen::{
     dispatch::after,
     gm::LossyConvert,
     refs::{Weak, weak_from_ref},
-    system::Clipboard,
+    system::{Clipboard, open_url},
     text::Font,
     ui::{
-        Container, KeyCombo, Keys, Label, NamedKey, Point, RunStyle, Setup, Size, Touch, UIColor, UIEvents,
-        UIManager, ViewCallbacks, ViewData, ViewFrame, ViewSubviews, ViewTouch, view,
+        Container, CursorIcon, KeyCombo, Keys, Label, NamedKey, Point, RunStyle, Setup, Size, Touch, UIColor,
+        UIEvents, UIManager, ViewCallbacks, ViewData, ViewFrame, ViewSubviews, ViewTouch, view,
     },
 };
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use crate::{
     keys,
@@ -56,10 +56,10 @@ pub struct TerminalSize {
 }
 
 /// A terminal: the screen of a shell with its colors and its cursor, the
-/// keys, a selection with the mouse, copy and paste and the wheel over what
-/// scrolled away. It runs no shell, the owner feeds it what a shell prints
-/// and sends what it gives out to that shell. `LocalTerminal` does both for
-/// a shell on this machine.
+/// keys, a selection with the mouse, copy and paste, the wheel over what
+/// scrolled away, and links that open in the browser with a click. It runs no
+/// shell, the owner feeds it what a shell prints and sends what it gives out to
+/// that shell. `LocalTerminal` does both for a shell on this machine.
 #[view]
 pub struct TerminalView {
     /// Bytes for the shell: typed keys, a paste, the answers to what the
@@ -84,6 +84,11 @@ pub struct TerminalView {
     ended:   bool,
     /// The cell a press began on, a selection starts when it moves on.
     pressed: Option<(usize, usize)>,
+    /// The link a click with no drag let go on. It opens when no second
+    /// click follows, a double click selects a word.
+    clicked: Option<String>,
+    /// A link is under the pointer, the board shows the hand.
+    on_link: bool,
     /// What the wheel turned and no line used up yet, in points.
     wheel:   f32,
 
@@ -100,11 +105,19 @@ impl Setup for TerminalView {
         self.board.enable_touch();
         self.board.touch().all.val(move |touch| self.touched(touch));
         self.board.touch().double_tap.val(self, move |touch| self.pick_word(touch));
+        self.board.touch().single_tap.val(self, move |_| self.open_clicked());
+        self.board.enable_hover();
+        self.board.touch().hovered.val(self, move |hovered| {
+            if !hovered {
+                self.hover(None);
+            }
+        });
         self.probe.set_hidden(true);
 
         UIEvents::keyboard_input().val(self, move |char| self.typed(char));
         UIEvents::keyboard_key().val(self, move |key| self.pressed_key(key));
         UIEvents::on_scroll().val(self, move |delta| self.wheeled(delta));
+        UIEvents::pointer_moved().val(self, move |point| self.pointer_moved(point));
 
         let keymap = UIManager::keymap();
         // The engine takes Ctrl for Cmd too, and in a terminal Ctrl with a
@@ -335,6 +348,7 @@ impl TerminalView {
             return;
         };
         let rows = screen.rows();
+        let on_link = screen.link_hovered();
         for (index, row) in rows.iter().enumerate() {
             let Some(label) = self.labels.get(index).copied() else {
                 break;
@@ -345,6 +359,14 @@ impl TerminalView {
             Self::draw_row(label, row, &style);
         }
         self.shown = rows;
+        if on_link != self.on_link {
+            self.on_link = on_link;
+            self.board.set_hover_cursor(if on_link {
+                CursorIcon::Pointer
+            } else {
+                CursorIcon::Default
+            });
+        }
     }
 
     fn draw_row(label: Weak<Label>, row: &Row, style: &TerminalStyle) {
@@ -479,10 +501,11 @@ impl TerminalView {
     }
 
     /// A press and a drag select text, a plain click takes a selection
-    /// away.
+    /// away and keeps the link under it for `open_clicked`.
     fn touched(mut self: Weak<Self>, touch: Touch) {
         let at = self.cell_at(touch.position);
         let mut pressed = self.pressed;
+        let mut clicked = None;
         let Some(screen) = &mut self.screen else {
             return;
         };
@@ -497,10 +520,43 @@ impl TerminalView {
                 screen.select_to(at.0, at.1);
             }
         } else {
-            pressed = None;
+            clicked = pressed.take().and_then(|(column, row)| screen.link_at(column, row));
         }
         self.pressed = pressed;
+        self.clicked = clicked;
         self.draw_soon();
+    }
+
+    /// A click with no drag and no second click after it: its link opens
+    /// in the browser.
+    fn open_clicked(mut self: Weak<Self>) {
+        let Some(url) = self.clicked.take() else {
+            return;
+        };
+        // The query of an address can hold a token, it stays out of the log.
+        let address = url.split(['?', '#']).next().unwrap_or_default();
+        info!("opening the link {address} of the terminal");
+        if let Err(err) = open_url(&url) {
+            warn!("the link {address} of the terminal did not open: {err:#}");
+        }
+    }
+
+    /// The pointer moved over the window. Over the cells the link under it
+    /// gets a line under it.
+    fn pointer_moved(self: Weak<Self>, point: Point) {
+        let frame = self.absolute_frame();
+        let cell =
+            (!self.is_hidden_in_tree() && frame.contains(point)).then(|| self.cell_at(point - frame.origin));
+        self.hover(cell);
+    }
+
+    fn hover(mut self: Weak<Self>, cell: Option<(usize, usize)>) {
+        let Some(screen) = &mut self.screen else {
+            return;
+        };
+        if screen.hover(cell) {
+            self.draw_soon();
+        }
     }
 
     /// A double click selects the word under it.

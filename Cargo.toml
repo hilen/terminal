@@ -6,7 +6,7 @@ alacritty_terminal = { version = "0.26", default-features = false }
 anyhow             = "1.0"
 # Every app that uses this crate pins the same hilen commit, or Cargo builds
 # 2 copies of hilen and the views of this crate fit in none of its windows.
-hilen              = { git = "https://github.com/hilen/hilen", rev = "1afaa9ca621f405f8ca92ea78944571fbf6504f6" }
+hilen              = { git = "https://github.com/hilen/hilen", rev = "93d058378a228d37b2cafff2a3cdb80d901bd653" }
 log                = "0.4"
 # 0.9.0 of crates.io pulls nix 0.28, whose build script Rust will refuse in a
 # future release. wezterm main has nix 0.29 and no release since 2025-02-12.

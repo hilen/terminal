@@ -1924,7 +1924,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hilen"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -2031,7 +2031,7 @@ dependencies = [
 [[package]]
 name = "hilen-pixels"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "glam",
  "tiny-skia 0.12.0",
@@ -2040,7 +2040,7 @@ dependencies = [
 [[package]]
 name = "hilen-updater"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
@@ -4037,7 +4037,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plat"
 version = "0.10.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "cfg_aliases",
 ]
@@ -4195,7 +4195,7 @@ dependencies = [
 [[package]]
 name = "project-proc"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "anyhow",
  "quote",
@@ -6097,7 +6097,7 @@ dependencies = [
 [[package]]
 name = "ui-proc"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=75799db8276490bfd71489b90077c876994139ce#75799db8276490bfd71489b90077c876994139ce"
+source = "git+https://github.com/hilen/hilen?rev=8a89928549913ceac479156e7ecfe15a7f14ef55#8a89928549913ceac479156e7ecfe15a7f14ef55"
 dependencies = [
  "parking_lot",
  "quote",

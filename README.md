@@ -38,6 +38,12 @@ terminal = { git = "https://github.com/hilen/terminal", rev = "<full sha>" }
   more rows comes back whole. Everything is there when `ended` fires, so the app can
   read what the program said at its end. codeloom finds the first error of a build this
   way.
+- `set_line_buttons` puts buttons right after the text of printed lines. Each
+  `LineButton` names its line in `lines()`, its title and its 2 colors. A button moves
+  with its line when the view scrolls, and hides while the line is out of view. A tap
+  fires `line_button_tapped` with the place of the button in the list, and an empty
+  list takes them all away. codeloom puts Apply after a fix the compiler suggests this
+  way.
 - `TerminalStyle` holds a mono font, the bold font, the text size, the gap to the edge
   and a `TerminalPalette`. The default palette is Atelier Dune Light in the light theme
   and Bamboo in the dark one.

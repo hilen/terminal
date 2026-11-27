@@ -350,6 +350,40 @@ impl Screen {
         lines
     }
 
+    /// Where the text of line `line` of [`Self::lines`] ends in the view:
+    /// the row of the last of its rows, and the column right after its
+    /// last char. None while that row is scrolled out of the view.
+    pub fn line_end(&self, line: usize) -> Option<(usize, usize)> {
+        let grid = self.term.grid();
+        let last = self.term.last_column();
+        let wraps = |row: i32| grid[Line(row)][last].flags.contains(Flags::WRAPLINE);
+        let bottom = self.term.bottommost_line().0;
+        let mut row = self.term.topmost_line().0;
+        for _ in 0..line {
+            while row < bottom && wraps(row) {
+                row += 1;
+            }
+            row += 1;
+        }
+        while row < bottom && wraps(row) {
+            row += 1;
+        }
+        if row > bottom {
+            return None;
+        }
+        let cells = &grid[Line(row)];
+        let end = (0..=last.0)
+            .rev()
+            .find(|column| cells[Column(*column)].c != ' ')
+            .map_or(0, |column| {
+                // A wide char takes 2 cells, its spacer counts too.
+                column + 1 + usize::from(cells[Column(column)].flags.contains(Flags::WIDE_CHAR))
+            });
+        let shown = row.checked_add(i32::try_from(grid.display_offset()).ok()?)?;
+        let shown = usize::try_from(shown).ok().filter(|shown| *shown < self.size.lines)?;
+        Some((shown, end))
+    }
+
     /// Every row of the view, the top one first.
     pub fn rows(&self) -> Vec<Row> {
         let hovered = self.hovered_link();
@@ -633,5 +667,21 @@ mod tests {
                 "five"
             ]
         );
+    }
+
+    #[test]
+    fn a_line_ends_on_its_last_wrapped_row_and_only_in_view() {
+        let mut screen = screen();
+        screen.feed(
+            b"one\r\nerror: bad\r\n  --> src/a_long_file_name.rs:5:17\r\nfour\r\nfive\r\n",
+            no_color,
+        );
+        // The --> line wrapped onto the top row of the view.
+        assert_eq!(screen.line_end(2), Some((0, 14)));
+        assert_eq!(screen.line_end(4), Some((2, 4)));
+        assert_eq!(screen.line_end(0), None);
+        assert_eq!(screen.line_end(9), None);
+        screen.scroll(3);
+        assert_eq!(screen.line_end(0), Some((0, 3)));
     }
 }

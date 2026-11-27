@@ -11,8 +11,8 @@ use hilen::{
     system::{Clipboard, open_url},
     text::Font,
     ui::{
-        Container, CursorIcon, KeyCombo, Keys, Label, NamedKey, Point, RunStyle, Setup, Size, Touch, UIColor,
-        UIEvents, UIManager, ViewCallbacks, ViewData, ViewFrame, ViewSubviews, ViewTouch, view,
+        Button, Container, CursorIcon, KeyCombo, Keys, Label, NamedKey, Point, RunStyle, Setup, Size, Touch,
+        UIColor, UIEvents, UIManager, ViewCallbacks, ViewData, ViewFrame, ViewSubviews, ViewTouch, view,
     },
 };
 use log::{debug, info, warn};
@@ -44,6 +44,18 @@ pub struct TerminalStyle {
     pub pad:       f32,
 }
 
+/// A button the owner puts right after the text of a printed line, like
+/// Apply next to a fix a compiler suggests. It moves with its line when
+/// the view scrolls, and hides while the line is out of the view.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LineButton {
+    /// The line in [`TerminalView::lines`].
+    pub line:       usize,
+    pub title:      String,
+    pub color:      UIColor,
+    pub text_color: UIColor,
+}
+
 /// The size of the screen of a shell, the shell has to hear of every new
 /// one.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -64,33 +76,39 @@ pub struct TerminalSize {
 pub struct TerminalView {
     /// Bytes for the shell: typed keys, a paste, the answers to what the
     /// shell asked and mouse reports.
-    pub keys:    Event<Vec<u8>>,
+    pub keys:               Event<Vec<u8>>,
     /// The screen got a size, the first one too.
-    pub resized: Event<TerminalSize>,
+    pub resized:            Event<TerminalSize>,
+    /// A tap on a button of `set_line_buttons`, with its place in that
+    /// list.
+    pub line_button_tapped: Event<usize>,
 
-    style:   Option<TerminalStyle>,
+    style:        Option<TerminalStyle>,
     /// None until the view has a size.
-    screen:  Option<Screen>,
+    screen:       Option<Screen>,
     /// What came in before the screen had a size.
-    pending: Vec<u8>,
+    pending:      Vec<u8>,
     /// What the labels show, a row that did not change is not set again.
-    shown:   Vec<Row>,
-    labels:  Vec<Weak<Label>>,
+    shown:        Vec<Row>,
+    labels:       Vec<Weak<Label>>,
     /// The size the cells were fitted into last.
-    fitted:  Size,
+    fitted:       Size,
     /// The screen changed and the labels are not made new yet.
-    stale:   bool,
+    stale:        bool,
     /// The shell is over, no key goes out.
-    ended:   bool,
+    ended:        bool,
     /// The cell a press began on, a selection starts when it moves on.
-    pressed: Option<(usize, usize)>,
+    pressed:      Option<(usize, usize)>,
     /// The link a click with no drag let go on. It opens when no second
     /// click follows, a double click selects a word.
-    clicked: Option<String>,
+    clicked:      Option<String>,
     /// A link is under the pointer, the board shows the hand.
-    on_link: bool,
+    on_link:      bool,
     /// What the wheel turned and no line used up yet, in points.
-    wheel:   f32,
+    wheel:        f32,
+    line_buttons: Vec<LineButton>,
+    /// 1 view for each of `line_buttons`.
+    button_views: Vec<Weak<Button>>,
 
     #[init]
     /// Takes the touches and holds the rows.
@@ -188,10 +206,30 @@ impl TerminalView {
         self.draw_soon();
     }
 
+    /// Buttons right after the text of printed lines, in the place of the
+    /// ones before. An empty list takes them all away.
+    pub fn set_line_buttons(mut self: Weak<Self>, buttons: Vec<LineButton>) {
+        for mut view in std::mem::take(&mut self.button_views) {
+            view.remove_from_superview();
+        }
+        for (index, button) in buttons.iter().enumerate() {
+            let view = self.board.add_view::<Button>();
+            view.set_text(&button.title);
+            view.set_color(button.color);
+            view.set_text_color(button.text_color);
+            view.on_tap(move || self.line_button_tapped.trigger(index));
+            view.set_hidden(true);
+            self.button_views.push(view);
+        }
+        self.line_buttons = buttons;
+        self.place_buttons();
+    }
+
     /// An empty screen of the size of now, for a stream of a shell that
     /// starts again from its first byte. The size stays, so `resized` does
     /// not fire.
     pub fn reset(mut self: Weak<Self>) {
+        self.set_line_buttons(Vec::new());
         self.pending.clear();
         let cell = self.probe.cell_size();
         if let Some(screen) = &mut self.screen {
@@ -365,6 +403,7 @@ impl TerminalView {
             Self::draw_row(label, row, &style);
         }
         self.shown = rows;
+        self.place_buttons();
         if on_link != self.on_link {
             self.on_link = on_link;
             self.board.set_hover_cursor(if on_link {
@@ -372,6 +411,32 @@ impl TerminalView {
             } else {
                 CursorIcon::Default
             });
+        }
+    }
+
+    /// Each button 1 cell after the end of its line, as high as a row.
+    fn place_buttons(&self) {
+        let (Some(screen), Some(style)) = (&self.screen, self.style) else {
+            return;
+        };
+        let (_, cell) = self.cells();
+        let pad = self.pad();
+        for (button, view) in self.line_buttons.iter().zip(&self.button_views) {
+            let Some((row, column)) = screen.line_end(button.line) else {
+                view.set_hidden(true);
+                continue;
+            };
+            let (row, column): (f32, f32) = (row.lossy_convert(), column.lossy_convert());
+            view.set_text_size(style.text_size - 2.0);
+            view.set_corner_radius(cell.height / 2.0);
+            let width = view.content_size().width + cell.width * 2.0;
+            view.set_frame((
+                pad + (column + 1.0) * cell.width,
+                pad + row * cell.height,
+                width,
+                cell.height,
+            ));
+            view.set_hidden(false);
         }
     }
 

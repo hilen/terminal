@@ -23,4 +23,4 @@ pub use local::LocalTerminal;
 pub use palette::TerminalPalette;
 #[cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))]
 pub use shell::LocalShell;
-pub use view::{TerminalSize, TerminalStyle, TerminalView};
+pub use view::{LineButton, TerminalSize, TerminalStyle, TerminalView};

@@ -10,7 +10,7 @@ use hilen::{
 };
 use log::warn;
 
-use crate::{LocalShell, TerminalSize, TerminalStyle, TerminalView, shell::CTRL_C};
+use crate::{LineButton, LocalShell, TerminalSize, TerminalStyle, TerminalView, shell::CTRL_C};
 
 /// What starts once the view has a size.
 struct Start {
@@ -26,7 +26,10 @@ struct Start {
 pub struct LocalTerminal {
     /// The shell or the program ended, by `exit` or by itself, with its
     /// exit code. One that a signal ended has none.
-    pub ended: Event<Option<u32>>,
+    pub ended:              Event<Option<u32>>,
+    /// A tap on a button of `set_line_buttons`, with its place in that
+    /// list.
+    pub line_button_tapped: Event<usize>,
 
     waiting: Option<Start>,
     shell:   Option<LocalShell>,
@@ -40,6 +43,9 @@ impl Setup for LocalTerminal {
         self.view.place().back();
         self.view.keys.val(move |keys| self.write(&keys));
         self.view.resized.val(move |size| self.resized(size));
+        self.view
+            .line_button_tapped
+            .val(move |index| self.line_button_tapped.trigger(index));
     }
 }
 
@@ -88,6 +94,12 @@ impl LocalTerminal {
     /// when `ended` fires.
     pub fn lines(&self) -> Vec<String> {
         self.view.lines()
+    }
+
+    /// Buttons right after the text of printed lines, see
+    /// [`TerminalView::set_line_buttons`].
+    pub fn set_line_buttons(self: Weak<Self>, buttons: Vec<LineButton>) {
+        self.view.set_line_buttons(buttons);
     }
 
     /// Gives the keys to the terminal, as a click on it does.

@@ -201,6 +201,12 @@ impl TerminalView {
         self.draw_soon();
     }
 
+    /// Every line printed so far, see [`Screen::lines`]. Empty before the
+    /// view has a size.
+    pub fn lines(&self) -> Vec<String> {
+        self.screen.as_ref().map_or_default(Screen::lines)
+    }
+
     /// The size of the screen, None before the view has one.
     pub fn size(&self) -> Option<TerminalSize> {
         let screen = self.screen.as_ref()?;

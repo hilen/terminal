@@ -33,6 +33,11 @@ terminal = { git = "https://github.com/hilen/terminal", rev = "<full sha>" }
   on the screen, like a note on how the program ended. It takes the escape codes a
   program prints, and a new line is `\r\n`. codeloom runs the program of the open file
   this way.
+- `lines()` of `LocalTerminal` and `TerminalView` gives every line printed so far, the
+  scrollback first, as plain text with no escape codes. A line the terminal wrapped onto
+  more rows comes back whole. Everything is there when `ended` fires, so the app can
+  read what the program said at its end. codeloom finds the first error of a build this
+  way.
 - `TerminalStyle` holds a mono font, the bold font, the text size, the gap to the edge
   and a `TerminalPalette`. The default palette is Atelier Dune Light in the light theme
   and Bamboo in the dark one.

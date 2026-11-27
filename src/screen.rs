@@ -318,6 +318,38 @@ impl Screen {
         self.link_in_view(column, row)
     }
 
+    /// Every line printed so far, the scrollback first. The rows the
+    /// terminal wrapped a line onto are joined back into it, the blanks
+    /// at its end are cut, and the empty rows under the last line are
+    /// left out.
+    pub fn lines(&self) -> Vec<String> {
+        let grid = self.term.grid();
+        let last = self.term.last_column();
+        let mut lines = Vec::new();
+        let mut line = String::new();
+        for row in self.term.topmost_line().0..=self.term.bottommost_line().0 {
+            let cells = &grid[Line(row)];
+            for column in 0..=last.0 {
+                let cell = &cells[Column(column)];
+                if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                    continue;
+                }
+                line.push(cell.c);
+                line.extend(cell.zerowidth().unwrap_or_default());
+            }
+            if !cells[last].flags.contains(Flags::WRAPLINE) {
+                lines.push(take(&mut line).trim_end().to_string());
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line.trim_end().to_string());
+        }
+        while lines.last().is_some_and(String::is_empty) {
+            lines.pop();
+        }
+        lines
+    }
+
     /// Every row of the view, the top one first.
     pub fn rows(&self) -> Vec<Row> {
         let hovered = self.hovered_link();
@@ -579,5 +611,27 @@ mod tests {
         assert_eq!(screen.selected_text().as_deref(), Some("world"));
         screen.clear_selection();
         assert_eq!(screen.selected_text(), None);
+    }
+
+    // The failure this prevents: an owner that reads the place of an error
+    // from the lines gets it cut in 2 where the terminal wrapped it, or
+    // misses it once it scrolled away.
+    #[test]
+    fn the_lines_hold_the_scrollback_with_wrapped_rows_joined() {
+        let mut screen = screen();
+        screen.feed(
+            b"one\r\n\x1b[31merror\x1b[0m: bad\r\n  --> src/a_long_file_name.rs:5:17\r\nfour\r\nfive\r\n",
+            no_color,
+        );
+        assert_eq!(
+            screen.lines(),
+            [
+                "one",
+                "error: bad",
+                "  --> src/a_long_file_name.rs:5:17",
+                "four",
+                "five"
+            ]
+        );
     }
 }

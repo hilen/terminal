@@ -83,6 +83,13 @@ impl LocalTerminal {
         self.view.feed(text.as_bytes());
     }
 
+    /// Every line the shell or the program printed so far, the scrollback
+    /// first, with the rows the terminal wrapped joined. All of it is there
+    /// when `ended` fires.
+    pub fn lines(&self) -> Vec<String> {
+        self.view.lines()
+    }
+
     /// Gives the keys to the terminal, as a click on it does.
     pub fn focus(self: Weak<Self>) {
         self.view.focus();

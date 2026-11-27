@@ -57,7 +57,12 @@ terminal = { git = "https://github.com/hilen/terminal", rev = "<full sha>" }
   `javascript:` or `file:`, does not open. The link opens only when no second click
   follows, about 250 ms later, so a double click still selects a word, and a drag still
   selects text. The link under the pointer gets a line under it and a hand cursor.
-- Copy is Cmd C and paste Cmd V. The engine also takes Ctrl for Cmd, and a shell needs
+- A place in a file a program printed, like `src/main.rs:3:7` of a compiler error or a
+  panic, is a link too: a path with a dot or a slash in it, a line number and maybe a
+  column. A click on it fires `place_tapped` with that text, and the app finds the file,
+  it does not open in the browser. codeloom opens it in its editor this way.
+- Copy is Cmd C and paste Cmd V. A selection copies also after the shell or the program
+  ended, paste needs one that runs. The engine also takes Ctrl for Cmd, and a shell needs
   Ctrl with a letter, so an app that binds Cmd keys checks `Keys::modifiers().meta()`
   while the terminal has the keys, `has_keys`.
 

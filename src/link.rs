@@ -1,6 +1,7 @@
-//! The links on a screen: an address a program printed, and a link it
-//! marked with OSC 8, the escape code of a link in a terminal. A long
-//! address the terminal wrapped onto the next rows is found whole.
+//! The links on a screen: an address a program printed, a link it marked
+//! with OSC 8, the escape code of a link in a terminal, and a place in a
+//! file like `src/main.rs:3:7`. A long one the terminal wrapped onto the
+//! next rows is found whole.
 
 use alacritty_terminal::{
     grid::Dimensions,
@@ -20,6 +21,9 @@ pub struct Link {
     pub url:   String,
     pub start: Point,
     pub end:   Point,
+    /// A place in a file, like `src/main.rs:3:7`, for the owner to open,
+    /// not an address for the browser.
+    pub place: bool,
 }
 
 impl Link {
@@ -39,7 +43,7 @@ pub fn link_at<T>(term: &Term<T>, point: Point) -> Option<Link> {
     }
     marked_link(term, point)
         .or_else(|| printed_link(term, point))
-        .filter(|link| is_safe_link(&link.url))
+        .filter(|link| link.place || is_safe_link(&link.url))
 }
 
 /// A link a program marked with OSC 8: the cells in a row that hold the
@@ -64,6 +68,7 @@ fn marked_link<T>(term: &Term<T>, point: Point) -> Option<Link> {
         url: hyperlink.uri().to_string(),
         start,
         end,
+        place: false,
     })
 }
 
@@ -105,17 +110,61 @@ fn printed_link<T>(term: &Term<T>, point: Point) -> Option<Link> {
         }
     }
 
-    let link = LinkFinder::new()
+    let (from, to, place) = LinkFinder::new()
         .kinds(&[LinkKind::Url])
         .links(&text)
-        .find(|link| link.start() <= pointed && pointed < link.end())?;
-    let start = cells.iter().find(|(byte, _)| *byte >= link.start())?.1;
-    let end = cells.iter().rev().find(|(byte, _)| *byte < link.end())?.1;
+        .find(|link| link.start() <= pointed && pointed < link.end())
+        .map(|link| (link.start(), link.end(), false))
+        .or_else(|| place_around(&text, pointed).map(|(from, to)| (from, to, true)))?;
+    let start = cells.iter().find(|(byte, _)| *byte >= from)?.1;
+    let end = cells.iter().rev().find(|(byte, _)| *byte < to)?.1;
     Some(Link {
-        url: link.as_str().to_string(),
+        url: text[from..to].to_string(),
         start,
         end,
+        place,
     })
+}
+
+/// The place in a file around byte `at` of `text`, as its range of bytes.
+/// The colon a panic prints after its place is not part of it.
+fn place_around(text: &str, at: usize) -> Option<(usize, usize)> {
+    let stop = |c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '(' | ')' | '[' | ']' | '<' | '>' | '"' | '\'' | '`' | ',' | ';'
+            )
+    };
+    let start = text[..at]
+        .char_indices()
+        .rev()
+        .find(|(_, c)| stop(*c))
+        .map_or(0, |(byte, c)| byte + c.len_utf8());
+    let end = text[at..]
+        .char_indices()
+        .find(|(_, c)| stop(*c))
+        .map_or(text.len(), |(byte, _)| at + byte);
+    let place = text[start..end].trim_end_matches([':', '.']);
+    let end = start + place.len();
+    (at < end && is_place(place)).then_some((start, end))
+}
+
+/// A path with a dot or a slash in it, then `:` and a line number, and
+/// maybe `:` and a column, like `src/main.rs:3:7` or `/a/build.rs:12`.
+fn is_place(text: &str) -> bool {
+    let number = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    let Some((rest, last)) = text.rsplit_once(':') else {
+        return false;
+    };
+    if !number(last) {
+        return false;
+    }
+    let path = match rest.rsplit_once(':') {
+        Some((path, line)) if number(line) => path,
+        _ => rest,
+    };
+    !path.is_empty() && !path.contains("://") && (path.contains('/') || path.contains('.'))
 }
 
 /// The cell before `point`, the last one of the row above for the first
@@ -148,6 +197,10 @@ mod tests {
         (0, 0, 0)
     }
 
+    fn url_at(screen: &Screen, column: usize, row: usize) -> Option<String> {
+        screen.link_at(column, row).map(|link| link.url)
+    }
+
     /// The line `infisical login` prints, the quote and the dot after the
     /// address are not part of it.
     #[test]
@@ -158,13 +211,13 @@ mod tests {
             no_color,
         );
         let url = Some("https://infisical.example.net/login?callback_port=40131".to_string());
-        assert_eq!(screen.link_at(6, 0), url);
-        assert_eq!(screen.link_at(60, 0), url);
-        assert_eq!(screen.link_at(5, 0), None);
-        assert_eq!(screen.link_at(61, 0), None);
-        assert_eq!(screen.link_at(62, 0), None);
-        assert_eq!(screen.link_at(70, 0), None);
-        assert_eq!(screen.link_at(10, 1), None);
+        assert_eq!(url_at(&screen, 6, 0), url);
+        assert_eq!(url_at(&screen, 60, 0), url);
+        assert_eq!(url_at(&screen, 5, 0), None);
+        assert_eq!(url_at(&screen, 61, 0), None);
+        assert_eq!(url_at(&screen, 62, 0), None);
+        assert_eq!(url_at(&screen, 70, 0), None);
+        assert_eq!(url_at(&screen, 10, 1), None);
     }
 
     #[test]
@@ -172,17 +225,36 @@ mod tests {
         let mut screen = screen(20);
         screen.feed(b"see https://example.com/a/very/long/path ok\x1b[?25l", no_color);
         let url = Some("https://example.com/a/very/long/path".to_string());
-        assert_eq!(screen.link_at(4, 0), url);
-        assert_eq!(screen.link_at(3, 1), url);
-        assert_eq!(screen.link_at(0, 2), None);
+        assert_eq!(url_at(&screen, 4, 0), url);
+        assert_eq!(url_at(&screen, 3, 1), url);
+        assert_eq!(url_at(&screen, 0, 2), None);
     }
 
     #[test]
     fn a_wide_char_before_an_address_does_not_move_it() {
         let mut screen = screen(30);
         screen.feed("漢 https://example.com/x\x1b[?25l".as_bytes(), no_color);
-        assert_eq!(screen.link_at(3, 0).as_deref(), Some("https://example.com/x"));
-        assert_eq!(screen.link_at(1, 0), None);
+        assert_eq!(url_at(&screen, 3, 0).as_deref(), Some("https://example.com/x"));
+        assert_eq!(url_at(&screen, 1, 0), None);
+    }
+
+    // The failure this prevents: a place of the compiler that is plain
+    // text, so a click on it goes nowhere.
+    #[test]
+    fn a_printed_place_is_a_link_for_the_owner() {
+        let mut screen = screen(60);
+        screen.feed(
+            b" --> src/number.rs:3:7\r\npanicked at src/main.rs:12:9:\r\nat 12:30:45 ok\x1b[?25l",
+            no_color,
+        );
+        let place = screen.link_at(6, 0).unwrap();
+        assert_eq!((place.url.as_str(), place.place), ("src/number.rs:3:7", true));
+        assert_eq!(url_at(&screen, 21, 0).as_deref(), Some("src/number.rs:3:7"));
+        assert_eq!(url_at(&screen, 2, 0), None);
+        assert_eq!(url_at(&screen, 14, 1).as_deref(), Some("src/main.rs:12:9"));
+        assert_eq!(url_at(&screen, 28, 1), None);
+        // A time is no place, it has no path.
+        assert_eq!(url_at(&screen, 5, 2), None);
     }
 
     #[test]
@@ -192,9 +264,12 @@ mod tests {
             b"read \x1b]8;;https://example.com/docs\x1b\\the docs\x1b]8;;\x1b\\ now\x1b[?25l",
             no_color,
         );
-        assert_eq!(screen.link_at(5, 0).as_deref(), Some("https://example.com/docs"));
-        assert_eq!(screen.link_at(12, 0).as_deref(), Some("https://example.com/docs"));
-        assert_eq!(screen.link_at(14, 0), None);
+        assert_eq!(url_at(&screen, 5, 0).as_deref(), Some("https://example.com/docs"));
+        assert_eq!(
+            url_at(&screen, 12, 0).as_deref(),
+            Some("https://example.com/docs")
+        );
+        assert_eq!(url_at(&screen, 14, 0), None);
     }
 
     #[test]
@@ -205,8 +280,8 @@ mod tests {
             no_color,
         );
         screen.feed(b"file:///etc/passwd\x1b[?25l", no_color);
-        assert_eq!(screen.link_at(1, 0), None);
-        assert_eq!(screen.link_at(8, 1), None);
+        assert_eq!(url_at(&screen, 1, 0), None);
+        assert_eq!(url_at(&screen, 8, 1), None);
     }
 
     #[test]

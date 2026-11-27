@@ -284,9 +284,9 @@ impl Screen {
         self.term.selection_to_string().filter(|text| !text.is_empty())
     }
 
-    /// The address of the link at a cell of the view.
-    pub fn link_at(&self, column: usize, row: usize) -> Option<String> {
-        self.link_in_view(column, row).map(|link| link.url)
+    /// The link at a cell of the view, an address or a place in a file.
+    pub fn link_at(&self, column: usize, row: usize) -> Option<Link> {
+        self.link_in_view(column, row)
     }
 
     fn link_in_view(&self, column: usize, row: usize) -> Option<Link> {

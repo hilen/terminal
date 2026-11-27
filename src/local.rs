@@ -30,6 +30,8 @@ pub struct LocalTerminal {
     /// A tap on a button of `set_line_buttons`, with its place in that
     /// list.
     pub line_button_tapped: Event<usize>,
+    /// A click on a place in a file, see [`TerminalView::place_tapped`].
+    pub place_tapped:       Event<String>,
 
     waiting: Option<Start>,
     shell:   Option<LocalShell>,
@@ -46,6 +48,7 @@ impl Setup for LocalTerminal {
         self.view
             .line_button_tapped
             .val(move |index| self.line_button_tapped.trigger(index));
+        self.view.place_tapped.val(move |place| self.place_tapped.trigger(place));
     }
 }
 

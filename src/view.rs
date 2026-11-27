@@ -19,6 +19,7 @@ use log::{debug, info, warn};
 
 use crate::{
     keys,
+    link::Link,
     palette::TerminalPalette,
     screen::{Cells, Lines, Paint, Pick, Row, Screen},
 };
@@ -84,6 +85,9 @@ pub struct TerminalView {
     /// A tap on a button of `set_line_buttons`, with its place in that
     /// list.
     pub line_button_tapped: Event<usize>,
+    /// A click on a place in a file a program printed, like
+    /// `src/main.rs:3:7`, with that text. The owner finds the file.
+    pub place_tapped:       Event<String>,
 
     style:        Option<TerminalStyle>,
     /// None until the view has a size.
@@ -103,7 +107,7 @@ pub struct TerminalView {
     pressed:      Option<(usize, usize)>,
     /// The link a click with no drag let go on. It opens when no second
     /// click follows, a double click selects a word.
-    clicked:      Option<String>,
+    clicked:      Option<Link>,
     /// A link is under the pointer, the board shows the hand.
     on_link:      bool,
     /// What the wheel turned and no line used up yet, in points.
@@ -147,8 +151,10 @@ impl Setup for TerminalView {
                 self.paste();
             }
         });
+        // A selection copies also after the shell or the program ended,
+        // like the output of a build.
         keymap.add(self, KeyCombo::cmd('c'), move || {
-            if Keys::modifiers().meta() && self.has_keys() {
+            if Keys::modifiers().meta() && self.board.is_selected() {
                 self.copy();
             }
         });
@@ -617,11 +623,17 @@ impl TerminalView {
     }
 
     /// A click with no drag and no second click after it: its link opens
-    /// in the browser.
+    /// in the browser, a place in a file goes to the owner.
     fn open_clicked(mut self: Weak<Self>) {
-        let Some(url) = self.clicked.take() else {
+        let Some(link) = self.clicked.take() else {
             return;
         };
+        if link.place {
+            info!("the place {} of the terminal was clicked", link.url);
+            self.place_tapped.trigger(link.url);
+            return;
+        }
+        let url = link.url;
         // The query of an address can hold a token, it stays out of the log.
         let address = url.split(['?', '#']).next().unwrap_or_default();
         info!("opening the link {address} of the terminal");

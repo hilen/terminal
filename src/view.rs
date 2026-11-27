@@ -6,7 +6,7 @@
 use hilen::{
     Event,
     dispatch::after,
-    gm::LossyConvert,
+    gm::{LossyConvert, color::CLEAR},
     refs::{Weak, weak_from_ref},
     system::{Clipboard, open_url},
     text::Font,
@@ -45,15 +45,17 @@ pub struct TerminalStyle {
 }
 
 /// A button the owner puts right after the text of a printed line, like
-/// Apply next to a fix a compiler suggests. It moves with its line when
-/// the view scrolls, and hides while the line is out of the view.
+/// `[Apply]` next to a fix a compiler suggests. It is text of the terminal:
+/// its font and size on the cell grid, in `color` with nothing behind it,
+/// and inverse under the pointer, the way a button of a program in a
+/// terminal lights up. It moves with its line when the view scrolls, and
+/// hides while the line is out of the view.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineButton {
     /// The line in [`TerminalView::lines`].
-    pub line:       usize,
-    pub title:      String,
-    pub color:      UIColor,
-    pub text_color: UIColor,
+    pub line:  usize,
+    pub title: String,
+    pub color: UIColor,
 }
 
 /// The size of the screen of a shell, the shell has to hear of every new
@@ -215,8 +217,10 @@ impl TerminalView {
         for (index, button) in buttons.iter().enumerate() {
             let view = self.board.add_view::<Button>();
             view.set_text(&button.title);
-            view.set_color(button.color);
-            view.set_text_color(button.text_color);
+            view.enable_hover();
+            view.set_hover_cursor(CursorIcon::Pointer);
+            let color = button.color;
+            view.touch().hover_within.val(view, move |_| self.paint_button(view, color));
             view.on_tap(move || self.line_button_tapped.trigger(index));
             view.set_hidden(true);
             self.button_views.push(view);
@@ -414,7 +418,20 @@ impl TerminalView {
         }
     }
 
-    /// Each button 1 cell after the end of its line, as high as a row.
+    /// Text in its color at rest, inverse under the pointer.
+    fn paint_button(&self, view: Weak<Button>, color: UIColor) {
+        let background = self.style.map_or(color, |style| style.palette.background.into());
+        if view.is_hover_within() {
+            view.set_color(color);
+            view.set_text_color(background);
+        } else {
+            view.set_color(CLEAR);
+            view.set_text_color(color);
+        }
+    }
+
+    /// Each button on the cells from 1 cell after the end of its line, 1
+    /// cell for each char of its title.
     fn place_buttons(&self) {
         let (Some(screen), Some(style)) = (&self.screen, self.style) else {
             return;
@@ -427,9 +444,10 @@ impl TerminalView {
                 continue;
             };
             let (row, column): (f32, f32) = (row.lossy_convert(), column.lossy_convert());
-            view.set_text_size(style.text_size - 2.0);
-            view.set_corner_radius(cell.height / 2.0);
-            let width = view.content_size().width + cell.width * 2.0;
+            let chars: f32 = button.title.chars().count().lossy_convert();
+            view.set_font(style.font).set_text_size(style.text_size);
+            self.paint_button(*view, button.color);
+            let width = chars * cell.width;
             view.set_frame((
                 pad + (column + 1.0) * cell.width,
                 pad + row * cell.height,

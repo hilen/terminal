@@ -1924,7 +1924,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hilen"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -1986,6 +1986,7 @@ dependencies = [
  "objc2-quartz-core 0.3.2",
  "objc2-ui-kit 0.3.2",
  "open",
+ "opener",
  "os_info",
  "parking_lot",
  "plat",
@@ -2031,7 +2032,7 @@ dependencies = [
 [[package]]
 name = "hilen-pixels"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "glam",
  "tiny-skia 0.12.0",
@@ -2040,7 +2041,7 @@ dependencies = [
 [[package]]
 name = "hilen-updater"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
@@ -3295,6 +3296,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0676bb32a98c1a483ce53e500a81ad9c3d5b3f7c920c28c24e9cb0980d0b5bc8"
 
 [[package]]
+name = "normpath"
+version = "1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b11ce00d2594068e8a27c9146fdc5cf9f3ac38eb42c7cd34d05fea618873ac9f"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3867,6 +3877,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "opener"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c826edd923022c3907477383fc77708fa68807170754fe7be1fd3496c57a1f1c"
+dependencies = [
+ "normpath",
+ "url",
+ "windows-sys 0.61.2",
+ "zbus",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4037,7 +4059,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plat"
 version = "0.10.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "cfg_aliases",
 ]
@@ -4195,7 +4217,7 @@ dependencies = [
 [[package]]
 name = "project-proc"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "anyhow",
  "quote",
@@ -6097,7 +6119,7 @@ dependencies = [
 [[package]]
 name = "ui-proc"
 version = "0.1.0"
-source = "git+https://github.com/hilen/hilen?rev=f2dcc62750f4fcba5fa2b1d56484d85f7caa530c#f2dcc62750f4fcba5fa2b1d56484d85f7caa530c"
+source = "git+https://github.com/hilen/hilen?rev=01535329757e23472e5342072e39e3000a67cd10#01535329757e23472e5342072e39e3000a67cd10"
 dependencies = [
  "parking_lot",
  "quote",
@@ -7180,6 +7202,7 @@ dependencies = [
  "endi",
  "enumflags2",
  "serde",
+ "url",
  "winnow",
  "zcheapstr",
  "zvariant_derive",
